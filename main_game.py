@@ -1,6 +1,7 @@
 ##############|IMPORTS|##############
 from random import randint
 import colorama
+import math
 
 ##############|CLASSES|#############
 
@@ -89,16 +90,19 @@ class Grid():
 class Game():
     
     # Initialisation:
-    def __init__(self) -> None:
+    def __init__(self, simulated:bool=False) -> None:
         self.grid = Grid()
         self.turn = 0
         self.players = self.grid.get_players()
+        self.simulated = simulated
     
     # Getters
     def get_turn(self) -> int:
         return self.turn
     def get_players(self) -> list:
         return self.players
+    def get_simulated(self) -> bool:
+        return self.simulated
     # Setters
     def set_turn(self, turn:int) -> bool:
         if type(turn) == int and turn >= 0:
@@ -110,7 +114,7 @@ class Game():
 
     # Methods
 
-    def play_turn(self) -> None:
+    def play_turn(self) -> bool:
         # Human player's turn
         if self.turn%2 == 0:
             player_played = False
@@ -128,9 +132,11 @@ class Game():
                         print(colorama.Fore.RED + "/!\ Incorrect input, try again.\n" + colorama.Style.RESET_ALL)
 
                 player_played = self.grid.add_pawn(0, (x,y))
+            print(f"{self.players[0]}'s turn.")
             self.grid.print()
         # IA player's turn
         else:
+            print(f"{self.players[1]}'s turn.")
             # TEMPORARY
             ia_played = False
             while not ia_played:
@@ -138,7 +144,93 @@ class Game():
             self.grid.print()
         self.turn += 1
 
+        # Check if game is final_state:
+        return self.grid.is_in_final_state()
+
+    def start_game(self):
+        end = False
+        while not end:
+            end = self.play_turn()
+        print(f"Winner is{self.players[self.grid.get_winner()]}")
+
+class Node():
+
+    def __init__(self, parent=None, content=Grid(), wins:int=0, visits:int=0) -> None:
+        self.sons = []
+        self.parent = parent
+        self.content = content
+        self.wins = wins
+        self.visits = visits
+
+    # Getters
+    def get_sons(self) -> list:
+        return self.sons
+    def get_parent(self):
+        return self.parent
+    def get_content(self) -> Grid:
+        return self.content
+    def get_wins(self) -> int:
+        return self.wins
+    def get_visits(self) -> int:
+        return self.visits
+    def get_ratio(self) -> str:
+        return f"{self.wins}/{self.visits}"
+    # Setters
+    def set_wins(self, v:int) -> None:
+        self.wins = v
+
+    def add_son(self, node) -> None:
+        self.sons.append(node)
+
+    def is_leave(self) -> bool:
+        return self.sons == []
+    
+    def is_root(self) -> bool:
+        return self.parent == None
+    
+class Tree():
+    
+    def __init__(self, root) -> None:
+        self.root = root
+
+    def get_root(self):
+        return self.root
+    
+    def find_node(self):
+        pass
+
+class MCTS():
+    
+    def __init__(self, tree:Tree, c:float=math.sqrt(2)) -> None:
+        self.tree = tree
+        self.c = c
+
+    def selection(self) -> Node:
+        selected_node = self.tree.get_root()
+        while not selected_node.is_leave():
+            max = float('-inf'); selected_node = None
+            for son in selected_node.get_sons():
+                val = son.get_wins()/son.get_visits()+self.c*math.sqrt(math.log(son.get_parent().get_visits())/son.get_visits())
+                if val > max:
+                    max = val; selected_node = son
+        return selected_node
+
+    def expansion(self) -> Node:
+        pass
+
+    def simulation(self) -> float:
+        pass
+
+    def retropropagation(self) -> bool:
+        pass
+
 my_game = Game()
-# my_game.set_turn(1)
-my_game.play_turn()
-my_game.play_turn()
+
+# TODO (Randomize starter player), add wait times and colors to terminal logs --> END
+# my_game.start_game() # Play a game against a random AI
+# TODO Implement the MCTS algorithm for tic-tac-toe
+
+m_tree = Tree(Node())
+# m_tree.get_root().add_son(Node(m_tree.get_root(), Grid().add_pawn(1, (randint(0,2),randint(0,2))), 0, 0))
+m_mcts = MCTS(m_tree, math.sqrt(2))
+print(m_mcts.selection().get_ratio())
