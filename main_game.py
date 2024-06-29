@@ -8,22 +8,39 @@ import math
 class Grid():
 
     # Initialisation
-    def __init__(self) -> None:
+    def __init__(self, simulated:bool=False) -> None:
         self.grid = [['   ' for _ in range(3)] for _ in range(3)]
         self.players = [' X ', ' O ']
         self.winner = -1
+        self.last_pawn_added = -1
+        self.simulated = simulated # A simulated Grid is a grid that has no need to have next legal_actions
+        if not self.simulated:
+            self.legal_actions = self.generate_legal_actions()
+        else:
+            self.legal_actions = []
     
     # Getters
     def get_players(self) -> list:
         return self.players
     def get_winner(self) -> int:
         return self.winner
+    def get_grid(self) -> list:
+        return self.grid
+    def get_legal_actions(self) -> list:
+        return self.legal_actions
+    def get_simulated(self) -> bool:
+        return self.simulated
     # Setters
+    def set_grid(self, grid:list):
+        self.grid = grid
     def set_players(self, players:list) -> None:
         self.players = players
     def set_winner(self, winner:int) -> None:
         self.winner = winner
-
+    def set_simulated(self, simulated:bool) -> None:
+        if self.simulated and not simulated:
+            self.generate_legal_actions()
+        self.simulated = simulated
 
     # Methods
 
@@ -52,14 +69,25 @@ class Grid():
         if 0 <= player <= len(self.players)-1:
             if self.grid[len(self.grid)-coord[1]-1][coord[0]] == '   ':
                 self.grid[len(self.grid)-coord[1]-1][coord[0]] = self.players[player]
+                self.last_pawn_added = player
                 return True
             else:
-                print(f"a{self.grid[len(self.grid)-coord[1]-1][coord[0]]}a")
                 return False
         else:
             return False
-                            
-    def is_in_final_state(self) -> int:
+
+    def generate_legal_actions(self) -> list:   # DOES NOT GENERATE THE LIST
+        possible_actions = []
+        for line in range(0,2):
+            for column in range(0,2):
+                temp_grid = Grid(True); temp_grid.set_grid(self.grid)
+                temp_grid.add_pawn((self.last_pawn_added+1)%2, (column, line))
+                print(temp_grid.get_grid())
+                if temp_grid.get_grid() != self.grid:
+                    possible_actions.append(temp_grid)
+        return possible_actions
+
+    def is_in_final_state(self) -> bool:
         final = False
         line = 0; column = 0
         while not final and line < len(self.grid):
@@ -147,7 +175,7 @@ class Game():
         # Check if game is final_state:
         return self.grid.is_in_final_state()
 
-    def start_game(self):
+    def start_game(self) -> None:
         end = False
         while not end:
             end = self.play_turn()
@@ -155,21 +183,21 @@ class Game():
 
 class Node():
 
-    def __init__(self, parent=None, content=Grid(), wins:int=0, visits:int=0) -> None:
-        self.sons = []
+    def __init__(self, parent=None, content:Grid=Grid(), wins:float=0, visits:int=0) -> None:
+        self.children = []
         self.parent = parent
-        self.content = content
+        self.content = content # The content of a Node is a Grid object
         self.wins = wins
         self.visits = visits
 
     # Getters
-    def get_sons(self) -> list:
-        return self.sons
+    def get_children(self) -> list:
+        return self.children
     def get_parent(self):
         return self.parent
     def get_content(self) -> Grid:
         return self.content
-    def get_wins(self) -> int:
+    def get_wins(self) -> float:
         return self.wins
     def get_visits(self) -> int:
         return self.visits
@@ -180,23 +208,27 @@ class Node():
         self.wins = v
 
     def add_son(self, node) -> None:
-        self.sons.append(node)
+        self.children.append(node)
 
-    def is_leave(self) -> bool:
-        return self.sons == []
+    def is_leaf(self) -> bool:
+        return self.children == []
     
     def is_root(self) -> bool:
         return self.parent == None
+    
+    # def expand(self) -> None:
+        
+    #     return child_node
     
 class Tree():
     
     def __init__(self, root) -> None:
         self.root = root
 
-    def get_root(self):
+    def get_root(self) -> Node:
         return self.root
     
-    def find_node(self):
+    def find_node(self): # Tree search
         pass
 
 class MCTS():
@@ -205,9 +237,14 @@ class MCTS():
         self.tree = tree
         self.c = c
 
+    def get_tree(self) -> Tree:
+        return self.tree
+    def set_c(self, c:float=math.sqrt(2)) -> None:
+        self.c = c
+
     def selection(self) -> Node:
         selected_node = self.tree.get_root()
-        while not selected_node.is_leave():
+        while not selected_node.is_leaf():
             max = float('-inf'); selected_node = None
             for son in selected_node.get_sons():
                 val = son.get_wins()/son.get_visits()+self.c*math.sqrt(math.log(son.get_parent().get_visits())/son.get_visits())
@@ -233,4 +270,8 @@ my_game = Game()
 m_tree = Tree(Node())
 # m_tree.get_root().add_son(Node(m_tree.get_root(), Grid().add_pawn(1, (randint(0,2),randint(0,2))), 0, 0))
 m_mcts = MCTS(m_tree, math.sqrt(2))
-print(m_mcts.selection().get_ratio())
+node = m_mcts.get_tree().get_root().get_content()
+print(node.get_legal_actions())
+for grid in node.get_legal_actions():
+    print(grid.get_grid().print())
+#print(m_mcts.selection().get_ratio()) # Prints the win/visits ratio of the node selected in step 1 (so the root in this case)
