@@ -1,7 +1,8 @@
 ##############|IMPORTS|##############
-from random import randint
+from random import randint, shuffle
 import colorama
 import math
+from copy import deepcopy
 
 ##############|CLASSES|#############
 
@@ -32,7 +33,7 @@ class Grid():
         return self.simulated
     # Setters
     def set_grid(self, grid:list):
-        self.grid = grid
+        self.grid = deepcopy(grid)
     def set_players(self, players:list) -> None:
         self.players = players
     def set_winner(self, winner:int) -> None:
@@ -41,6 +42,7 @@ class Grid():
         if self.simulated and not simulated:
             self.generate_legal_actions()
         self.simulated = simulated
+
 
     # Methods
 
@@ -76,13 +78,14 @@ class Grid():
         else:
             return False
 
-    def generate_legal_actions(self) -> list:   # DOES NOT GENERATE THE LIST
+    def generate_legal_actions(self) -> list:   # FOR SOME REASON THE set_grid() METHOD SEEMS TO ACT WEIRD
         possible_actions = []
-        for line in range(0,2):
-            for column in range(0,2):
-                temp_grid = Grid(True); temp_grid.set_grid(self.grid)
+        for line in range(3):
+            for column in range(3):
+                temp_grid = Grid(True)
+                temp_grid.set_grid(self.grid) # BUG
                 temp_grid.add_pawn((self.last_pawn_added+1)%2, (column, line))
-                print(temp_grid.get_grid())
+                print(temp_grid.get_grid(), (column, line), self.grid)
                 if temp_grid.get_grid() != self.grid:
                     possible_actions.append(temp_grid)
         return possible_actions
@@ -189,6 +192,8 @@ class Node():
         self.content = content # The content of a Node is a Grid object
         self.wins = wins
         self.visits = visits
+        self.untried_actions = self.content.get_legal_actions()
+        shuffle(self.untried_actions)
 
     # Getters
     def get_children(self) -> list:
@@ -204,8 +209,15 @@ class Node():
     def get_ratio(self) -> str:
         return f"{self.wins}/{self.visits}"
     # Setters
-    def set_wins(self, v:int) -> None:
+    def set_wins(self, v:float) -> None:
         self.wins = v
+    def set_visits(self, v:int) -> None:
+        self.visits = v
+    def set_parent(self, parent) -> None:
+        self.parent = parent
+
+
+    # Methods
 
     def add_son(self, node) -> None:
         self.children.append(node)
@@ -216,10 +228,14 @@ class Node():
     def is_root(self) -> bool:
         return self.parent == None
     
-    # def expand(self) -> None:
-        
-    #     return child_node
+    def expand(self) -> None:
+        child_node = self.untried_actions.pop()
+        child_node.set_simulated(False); child_node.set_parent(self)
+        self.children.append(child_node)
+        return child_node
     
+
+
 class Tree():
     
     def __init__(self, root) -> None:
@@ -228,8 +244,10 @@ class Tree():
     def get_root(self) -> Node:
         return self.root
     
-    def find_node(self): # Tree search
+    def find_node(self): # Tree search TODO
         pass
+
+
 
 class MCTS():
     
@@ -242,36 +260,50 @@ class MCTS():
     def set_c(self, c:float=math.sqrt(2)) -> None:
         self.c = c
 
-    def selection(self) -> Node:
-        selected_node = self.tree.get_root()
+    def selection(self, beginning_node:Node=None) -> Node:
+        if beginning_node == None:
+            selected_node = self.tree.get_root()
+        else:
+            selected_node = beginning_node
+
+        # Repeat until the node that has been selected using the UCT formula is a leaf of the tree
         while not selected_node.is_leaf():
             max = float('-inf'); selected_node = None
-            for son in selected_node.get_sons():
-                val = son.get_wins()/son.get_visits()+self.c*math.sqrt(math.log(son.get_parent().get_visits())/son.get_visits())
+            for child in selected_node.get_children():
+                # UCT formula: w/n + c*sqrt(ln(N)/n)
+                val = child.get_wins()/child.get_visits()+self.c*math.sqrt(math.log(child.get_parent().get_visits())/child.get_visits())
                 if val > max:
-                    max = val; selected_node = son
+                    max = val; selected_node = child
         return selected_node
 
-    def expansion(self) -> Node:
-        pass
+    def expansion(self, selected_node:Node) -> Node:
+        return selected_node.expand()
 
     def simulation(self) -> float:
         pass
 
-    def retropropagation(self) -> bool:
-        pass
+    def retropropagation(self, expanded_Node:Node, result:float) -> None:
+        is_root = False
+        current_node = expanded_Node
+        while not is_root:
+            current_node.set_visits(current_node.get_visits()+1) # Visits += 1
+            current_node.set_visits(current_node.get_visits()+1) # Wins += result (0, 1 or 0.5)
+            current_node = current_node.get_parent()
+            is_root = current_node.is_root()
 
-my_game = Game()
+
+
+
+#my_game = Game()
 
 # TODO (Randomize starter player), add wait times and colors to terminal logs --> END
 # my_game.start_game() # Play a game against a random AI
-# TODO Implement the MCTS algorithm for tic-tac-toe
 
 m_tree = Tree(Node())
 # m_tree.get_root().add_son(Node(m_tree.get_root(), Grid().add_pawn(1, (randint(0,2),randint(0,2))), 0, 0))
 m_mcts = MCTS(m_tree, math.sqrt(2))
-node = m_mcts.get_tree().get_root().get_content()
-print(node.get_legal_actions())
-for grid in node.get_legal_actions():
-    print(grid.get_grid().print())
+root = m_mcts.get_tree().get_root().get_content()
+print(root.get_legal_actions())
+for grid in root.get_legal_actions():
+    print(grid.get_grid())
 #print(m_mcts.selection().get_ratio()) # Prints the win/visits ratio of the node selected in step 1 (so the root in this case)
