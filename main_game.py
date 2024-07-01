@@ -3,6 +3,7 @@ from random import randint, shuffle
 import colorama
 import math
 from copy import deepcopy
+from treelib import Node, Tree
 
 ##############|CLASSES|#############
 
@@ -85,7 +86,6 @@ class Grid():
                 temp_grid = Grid(True)
                 temp_grid.set_grid(self.grid) # BUG
                 temp_grid.add_pawn((self.last_pawn_added+1)%2, (column, line))
-                print(temp_grid.get_grid(), (column, line), self.grid)
                 if temp_grid.get_grid() != self.grid:
                     possible_actions.append(temp_grid)
         return possible_actions
@@ -184,7 +184,7 @@ class Game():
             end = self.play_turn()
         print(f"Winner is{self.players[self.grid.get_winner()]}")
 
-class Node():
+class My_Node():
 
     def __init__(self, parent=None, content:Grid=Grid(), wins:float=0, visits:int=0) -> None:
         self.children = []
@@ -208,6 +208,14 @@ class Node():
         return self.visits
     def get_ratio(self) -> str:
         return f"{self.wins}/{self.visits}"
+    def get_path_to_root(self) -> list:
+        path = []
+        selected_node = self
+        end = selected_node.is_root()
+        while not end:
+            path.insert(0, selected_node)
+            selected_node = selected_node.get_parent()
+        return path
     # Setters
     def set_wins(self, v:float) -> None:
         self.wins = v
@@ -219,7 +227,7 @@ class Node():
 
     # Methods
 
-    def add_son(self, node) -> None:
+    def add_child(self, node) -> None:
         self.children.append(node)
 
     def is_leaf(self) -> bool:
@@ -236,31 +244,76 @@ class Node():
     
 
 
-class Tree():
+class My_Tree():
     
     def __init__(self, root) -> None:
         self.root = root
+        self.visualization_tree = Tree()
+        self.visualization_tree.create_node(tag=f"{self.root.get_ratio()}", identifier=0, parent=None, data=self.root.get_content())
 
-    def get_root(self) -> Node:
+    # Getters
+    def get_root(self) -> My_Node:
         return self.root
-    
-    def find_node(self): # Tree search TODO
-        pass
+    def get_visualization_tree(self) -> Tree:
+        return self.visualization_tree
 
+
+    # Methods
+
+    def find_grid_in_all_nodes(self, goal_grid:Grid) -> tuple: # TODO Test this
+        queue = []
+        selected_node = self.root
+        end = selected_node.is_leaf(); found = False
+        while not end:
+            # We add every child of the selected node in queue
+            for child in selected_node.get_children():
+                queue.append(child)
+            selected_node = queue.pop(0)
+            if selected_node.get_content().get_grid() != goal_grid.get_grid():
+                end = True; found = True
+            else:
+                end = selected_node.is_leaf()
+        return found, selected_node
+    
+    def get_all_nodes(self, path:list=[]) -> list:  # TODO Test this
+        temp_path = path
+        if temp_path == []: temp_path.append(self.root)
+        selected_node = path[-1]
+        if selected_node.is_leaf():
+            return [selected_node]
+        else:
+            temp_path += [selected_node]
+            for child in selected_node.get_children():
+                temp_path += self.get_all_nodes([child])
+            return temp_path
+        
+    def visualize_tree(self, show_tree:bool=True) -> None: # TODO Test this
+        all_nodes = self.get_all_nodes()
+        for i in range(1, len(all_nodes)):
+            node = all_nodes[i]
+            self.visualization_tree.create_node(tag=f"{node.get_ratio()}", identifier=i, parent=node.get_parent(), data=node.get_content())
+        if show_tree: self.visualization_tree.show()
 
 
 class MCTS():
     
-    def __init__(self, tree:Tree, c:float=math.sqrt(2)) -> None:
+    def __init__(self, tree:My_Tree, c:float=math.sqrt(2)) -> None:
         self.tree = tree
         self.c = c
 
-    def get_tree(self) -> Tree:
+    # Getters
+    def get_tree(self) -> My_Tree:
         return self.tree
+    # Setters
     def set_c(self, c:float=math.sqrt(2)) -> None:
         self.c = c
 
-    def selection(self, beginning_node:Node=None) -> Node:
+
+    # Methods
+
+
+    # Step 1 - Selection
+    def selection(self, beginning_node:My_Node=None) -> My_Node:
         if beginning_node == None:
             selected_node = self.tree.get_root()
         else:
@@ -276,13 +329,16 @@ class MCTS():
                     max = val; selected_node = child
         return selected_node
 
-    def expansion(self, selected_node:Node) -> Node:
+    # Step 2 - Expansion
+    def expansion(self, selected_node:My_Node) -> My_Node:
         return selected_node.expand()
 
-    def simulation(self) -> float:
+    # Step 3 - Simulation
+    def simulation(self) -> float:  # TODO
         pass
 
-    def retropropagation(self, expanded_Node:Node, result:float) -> None:
+    # Step 4 - Retropropagation
+    def retropropagation(self, expanded_Node:My_Node, result:float) -> None:
         is_root = False
         current_node = expanded_Node
         while not is_root:
@@ -294,16 +350,21 @@ class MCTS():
 
 
 
-#my_game = Game()
+m_tree = My_Tree(My_Node())
+new_grid = Grid(); new_grid.add_pawn(1, (randint(0,2),randint(0,2)))
+m_tree.get_root().add_child(My_Node(m_tree.get_root(), new_grid, 0, 0))
+all_nodes = m_tree.get_all_nodes()
+for node in all_nodes:
+    print(node.get_content().get_grid())    # BUG Adds two children instead of one (it adds the root as a child of the root + the desired node)
+#m_tree.visualize_tree()
 
-# TODO (Randomize starter player), add wait times and colors to terminal logs --> END
-# my_game.start_game() # Play a game against a random AI
 
-m_tree = Tree(Node())
-# m_tree.get_root().add_son(Node(m_tree.get_root(), Grid().add_pawn(1, (randint(0,2),randint(0,2))), 0, 0))
-m_mcts = MCTS(m_tree, math.sqrt(2))
-root = m_mcts.get_tree().get_root().get_content()
-print(root.get_legal_actions())
-for grid in root.get_legal_actions():
-    print(grid.get_grid())
+
+
+
+# m_mcts = MCTS(m_tree, math.sqrt(2))
+# root = m_mcts.get_tree().get_root().get_content()
+# print(root.get_legal_actions())
+# for grid in root.get_legal_actions():
+#     print(grid.get_grid())
 #print(m_mcts.selection().get_ratio()) # Prints the win/visits ratio of the node selected in step 1 (so the root in this case)
