@@ -79,13 +79,13 @@ class Grid():
         else:
             return False
 
-    def generate_legal_actions(self) -> list:   # FOR SOME REASON THE set_grid() METHOD SEEMS TO ACT WEIRD
+    def generate_legal_actions(self) -> list:   # BUG FOR SOME REASON THE set_grid() METHOD SEEMS TO ACT WEIRD + when expanding, the next move can actually replace a pawn that's already on the grid by a new one
         possible_actions = []
         for line in range(3):
             for column in range(3):
                 temp_grid = Grid(True)
-                temp_grid.set_grid(self.grid) # BUG
-                temp_grid.add_pawn((self.last_pawn_added+1)%2, (column, line))
+                temp_grid.set_grid(self.grid)
+                temp_grid.add_pawn((self.last_pawn_added+1)%2, (column, line))  # I forgot to check if there's already a pawn in place that's why it bugs
                 if temp_grid.get_grid() != self.grid:
                     possible_actions.append(temp_grid)
         return possible_actions
@@ -194,6 +194,10 @@ class My_Node():
         self.visits = visits
         self.untried_actions = self.content.get_legal_actions()
         shuffle(self.untried_actions)
+        if self.parent == None:
+            self.level = 0
+        else:
+            self.level = self.parent.get_level()+1
 
     # Getters
     def get_children(self) -> list:
@@ -216,6 +220,8 @@ class My_Node():
             path.insert(0, selected_node)
             selected_node = selected_node.get_parent()
         return path
+    def get_level(self) -> int:
+        return self.level
     # Setters
     def set_wins(self, v:float) -> None:
         self.wins = v
@@ -237,8 +243,9 @@ class My_Node():
         return self.parent == None
     
     def expand(self) -> None:
-        child_node = self.untried_actions.pop()
-        child_node.set_simulated(False); child_node.set_parent(self)
+        new_grid = self.untried_actions.pop()
+        new_grid.set_simulated(False)
+        child_node = My_Node(self, new_grid)
         self.children.append(child_node)
         return child_node
     
@@ -248,51 +255,53 @@ class My_Tree():
     
     def __init__(self, root) -> None:
         self.root = root
-        self.visualization_tree = Tree()
-        self.visualization_tree.create_node(tag=f"{self.root.get_ratio()}", identifier=0, parent=None, data=self.root.get_content())
 
     # Getters
     def get_root(self) -> My_Node:
         return self.root
-    def get_visualization_tree(self) -> Tree:
-        return self.visualization_tree
 
 
     # Methods
 
-    def find_grid_in_all_nodes(self, goal_grid:Grid) -> tuple: # TODO Test this
+    def find_grid_in_all_nodes(self, goal_grid:Grid) -> tuple: # Seems to work like this
         queue = []
         selected_node = self.root
         end = selected_node.is_leaf(); found = False
+        if selected_node.get_content().get_grid() == goal_grid.get_grid():
+            end = True; found = True
         while not end:
             # We add every child of the selected node in queue
             for child in selected_node.get_children():
                 queue.append(child)
             selected_node = queue.pop(0)
-            if selected_node.get_content().get_grid() != goal_grid.get_grid():
+            if selected_node.get_content().get_grid() == goal_grid.get_grid():
                 end = True; found = True
             else:
-                end = selected_node.is_leaf()
+                end = selected_node.is_leaf() and queue == []
         return found, selected_node
     
-    def get_all_nodes(self, path:list=[]) -> list:  # TODO Test this
+    def get_all_nodes(self, path:list=[]) -> list:
         temp_path = path
         if temp_path == []: temp_path.append(self.root)
         selected_node = path[-1]
         if selected_node.is_leaf():
             return [selected_node]
         else:
-            temp_path += [selected_node]
+            # temp_path += [selected_node] # Why does it seem to work better like this? ;-;
             for child in selected_node.get_children():
                 temp_path += self.get_all_nodes([child])
             return temp_path
         
-    def visualize_tree(self, show_tree:bool=True) -> None: # TODO Test this
+    def visualize_tree(self, property:str="") -> None:
+        visualization_tree = Tree()
         all_nodes = self.get_all_nodes()
+        node_identifiers = {all_nodes[0]:0}
+        visualization_tree.create_node(tag=all_nodes[0].get_ratio(), identifier=0, parent=None, data=all_nodes[0].get_content())
         for i in range(1, len(all_nodes)):
             node = all_nodes[i]
-            self.visualization_tree.create_node(tag=f"{node.get_ratio()}", identifier=i, parent=node.get_parent(), data=node.get_content())
-        if show_tree: self.visualization_tree.show()
+            node_identifiers[node] = i
+            visualization_tree.create_node(tag=node.get_ratio(), identifier=i, parent=node_identifiers[node.get_parent()], data=node.get_content())
+        print(visualization_tree.show(stdout=False, line_type="ascii-em", data_property=property)) # This non sense line is due to a problem inside treelib library
 
 
 class MCTS():
@@ -330,7 +339,7 @@ class MCTS():
         return selected_node
 
     # Step 2 - Expansion
-    def expansion(self, selected_node:My_Node) -> My_Node:
+    def expansion(self, selected_node:My_Node) -> My_Node: # TODO coz doesn't work
         return selected_node.expand()
 
     # Step 3 - Simulation
@@ -338,7 +347,7 @@ class MCTS():
         pass
 
     # Step 4 - Retropropagation
-    def retropropagation(self, expanded_Node:My_Node, result:float) -> None:
+    def retropropagation(self, expanded_Node:My_Node, result:float) -> None: # TODO Test this
         is_root = False
         current_node = expanded_Node
         while not is_root:
@@ -351,13 +360,15 @@ class MCTS():
 
 
 m_tree = My_Tree(My_Node())
-new_grid = Grid(); new_grid.add_pawn(1, (randint(0,2),randint(0,2)))
-m_tree.get_root().add_child(My_Node(m_tree.get_root(), new_grid, 0, 0))
-all_nodes = m_tree.get_all_nodes()
-for node in all_nodes:
-    print(node.get_content().get_grid())    # BUG Adds two children instead of one (it adds the root as a child of the root + the desired node)
-#m_tree.visualize_tree()
 
+new_grid = Grid(); new_grid.add_pawn(1, (randint(0,2),randint(0,2)))
+new_grid2 = Grid(); new_grid2.add_pawn(1, (1,1))
+new_grid3 = Grid(); new_grid3.add_pawn(1, (randint(0,2),randint(0,2)))
+m_tree.get_root().add_child(My_Node(m_tree.get_root(), new_grid, 0, 0))
+m_tree.get_root().add_child(My_Node(m_tree.get_root(), new_grid2, 0, 0))
+m_tree.get_root().get_children()[0].add_child(My_Node(m_tree.get_root().get_children()[0], new_grid3, 0, 0))
+
+m_tree.visualize_tree("grid")
 
 
 
